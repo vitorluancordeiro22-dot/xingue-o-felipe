@@ -26,66 +26,87 @@ const FELIPE_CROUCH_SIGHT=6;
 const REVIVE_SECONDS=10;
 const DOWNED_SECONDS=20;
 
-const charData: Record<string, { skin: number; shirt: number; scale: [number, number, number]; hair: number }> = {
-  luan: { skin: 0x9f6342, shirt: 0xf5a623, scale: [1.05, 1.18, 1.05], hair: 0x17110f },
-  lucas: { skin: 0xf0c5aa, shirt: 0x56c7ff, scale: [1.12, 1, 1.05], hair: 0x3b2419 },
-  joao: { skin: 0xe8c4ad, shirt: 0xc8ff55, scale: [0.82, 1.1, 0.82], hair: 0x4a3025 },
-  vitin: { skin: 0x6d3b28, shirt: 0xbd76ff, scale: [0.95, 1.03, 0.95], hair: 0x16100f },
-  matheus: { skin: 0xe0ad8d, shirt: 0xff667f, scale: [1.2, 0.98, 1.12], hair: 0x291914 },
-  felipe: { skin: 0xe4b99e, shirt: 0x2d6cdf, scale: [1, 1.05, 1], hair: 0x2b2019 },
+const charData: Record<string, { skin: number; shirt: number; pants:number; scale: [number, number, number]; hair: number; eyes:number }> = {
+  luan: { skin: 0xa96f50, shirt: 0x858d90, pants:0x26323b, scale: [1.14, 1.12, 1.08], hair: 0x151211, eyes:0x241812 },
+  lucas: { skin: 0xe8bfa6, shirt: 0x27252d, pants:0x26313a, scale: [1.05, 1.03, 1.02], hair: 0x241a16, eyes:0x668fa5 },
+  joao: { skin: 0xc98f70, shirt: 0x59604a, pants:0x29343a, scale: [0.84, 1.12, 0.84], hair: 0x1e1714, eyes:0x211812 },
+  vitin: { skin: 0x9b5e40, shirt: 0x211d25, pants:0x17131d, scale: [0.96, 1.04, 0.96], hair: 0x171210, eyes:0x251813 },
+  matheus: { skin: 0xd3a080, shirt: 0x172d70, pants:0x27303d, scale: [1.22, 1, 1.15], hair: 0x221814, eyes:0x69899a },
+  felipe: { skin: 0xd5a083, shirt: 0x2464bd, pants:0x27323b, scale: [1.02, 1.07, 1], hair: 0x211b18, eyes:0x281b15 },
 };
 
 export function makePerson(id: string, name: string) {
-  const d = charData[id];
+  const d = charData[id] || charData.felipe;
   const g = new THREE.Group();
   g.name = name;
+  g.userData.characterId=id;
+  const material=(color:number,roughness=.72)=>new THREE.MeshStandardMaterial({color,roughness});
+  const add=(geo:THREE.BufferGeometry,color:number,x:number,y:number,z:number,scale:[number,number,number]=[1,1,1])=>{
+    const mesh=new THREE.Mesh(geo,material(color));mesh.position.set(x,y,z);mesh.scale.set(...scale);mesh.castShadow=true;g.add(mesh);return mesh;
+  };
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(.48, 18), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: .24 }));
   shadow.rotation.x = -Math.PI / 2; shadow.position.y = .015; shadow.scale.y = .55; g.add(shadow);
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(.38, .72, 5, 10), new THREE.MeshStandardMaterial({ color: d.shirt, roughness: .78 }));
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(.38, .72, 6, 12), material(d.shirt,.82));
   body.position.y = 1.12; body.scale.set(...d.scale); body.castShadow = true; g.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(.34, 16, 12), new THREE.MeshStandardMaterial({ color: d.skin, roughness: .8 }));
-  head.position.y = 1.97; head.scale.set(1, id === "joao" ? 1.28 : 1, 1); head.castShadow = true; g.add(head);
-  const hair = new THREE.Mesh(
-    id === "vitin" ? new THREE.SphereGeometry(.42, 12, 9) : new THREE.BoxGeometry(.56, .18, .54),
-    new THREE.MeshStandardMaterial({ color: d.hair, roughness: 1 }),
-  );
-  hair.position.set(id === "felipe" ? .07 : 0, id === "vitin" ? 2.25 : 2.23, id === "vitin" ? 0 : -.02);
-  if (id !== "vitin") hair.rotation.z = id === "lucas" ? -.18 : .08;
-  g.add(hair);
-  const legMat = new THREE.MeshStandardMaterial({ color: id === "vitin" ? 0x17131d : 0x24303b });
+  // Neck and a less toy-like, individually proportioned face.
+  add(new THREE.CylinderGeometry(.16,.18,.22,10),d.skin,0,1.7,0);
+  const head = add(new THREE.SphereGeometry(.34, 20, 15),d.skin,0,1.99,0,
+    id==='joao'?[.9,1.24,.9]:id==='matheus'?[1.08,1,.98]:[1,1,1]);
+  head.castShadow=true;
+  const legMat = material(d.pants,.84);
   [-.2, .2].forEach((x) => { const leg = new THREE.Mesh(new THREE.CapsuleGeometry(.11, .52, 3, 7), legMat); leg.position.set(x, .47, 0); leg.castShadow = true; g.add(leg); });
-  if (id === "luan") {
-    const glasses = new THREE.Mesh(new THREE.BoxGeometry(.72, .14, .07), new THREE.MeshStandardMaterial({ color: 0x171717 }));
-    glasses.position.set(0, 2.02, .31); g.add(glasses);
-  }
-  if (id === "lucas" || id === "matheus" || id === "luan") {
-    const beard = new THREE.Mesh(new THREE.SphereGeometry(id === "lucas" ? .18 : .27, 10, 6), new THREE.MeshStandardMaterial({ color: d.hair }));
-    beard.scale.set(id === "lucas" ? 1.8 : 1, .5, .35); beard.position.set(0, 1.86, .3); g.add(beard);
-  }
-  if (id === "joao") [-.39, .39].forEach((x) => { const ear = new THREE.Mesh(new THREE.SphereGeometry(.14, 8, 6), new THREE.MeshStandardMaterial({ color: d.skin })); ear.scale.x = .5; ear.position.set(x, 2.02, 0); g.add(ear); });
-  // Articulated arms, gloves, boots and facial features.
-  const part = (geo: THREE.BufferGeometry, color: number, x: number, y: number, z: number) => {
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color, roughness:.65}));
-    mesh.position.set(x,y,z); mesh.castShadow=true; g.add(mesh); return mesh;
-  };
+  // Articulated arms, visible hands and chunkier footwear.
+  const shoulder=(id==='matheus'||id==='luan') ? .47 : .43;
   for (const side of [-1,1]) {
-    const arm = new THREE.Group(); arm.position.set(side*.43,1.5,0); arm.name='arm';
-    const sleeve=new THREE.Mesh(new THREE.CapsuleGeometry(.14,.4,4,8),new THREE.MeshStandardMaterial({color:d.shirt})); sleeve.position.y=-.2; arm.add(sleeve);
-    const hand=new THREE.Mesh(new THREE.SphereGeometry(.15,10,8),new THREE.MeshStandardMaterial({color:0x344748}));hand.position.y=-.58;arm.add(hand);g.add(arm);
-    part(new THREE.BoxGeometry(.26,.22,.43),0x151a20,side*.2,.13,.09);
-    part(new THREE.SphereGeometry(.08,10,8),0xf9eee0,side*.14,2.02,.3);
-    part(new THREE.SphereGeometry(.038,8,6),id==='lucas'?0x5f8dad:0x1b1513,side*.14,2.02,.369);
-    const brow=part(new THREE.BoxGeometry(.18,.045,.04),d.hair,side*.14,2.13,.32);brow.rotation.z=side*(id==='felipe'?.2:-.1);
+    const arm = new THREE.Group(); arm.position.set(side*shoulder,1.5,0); arm.name='arm';
+    const sleeve=new THREE.Mesh(new THREE.CapsuleGeometry(.14,.27,4,8),material(d.shirt));sleeve.position.y=-.14;arm.add(sleeve);
+    const forearm=new THREE.Mesh(new THREE.CapsuleGeometry(.115,.25,4,8),material(d.skin));forearm.position.y=-.48;arm.add(forearm);
+    const hand=new THREE.Mesh(new THREE.SphereGeometry(.13,10,8),material(d.skin));hand.position.y=-.7;arm.add(hand);g.add(arm);
+    add(new THREE.BoxGeometry(.27,.22,.45),0x14191e,side*.2,.13,.09);
+    add(new THREE.SphereGeometry(.082,10,8),0xf7f3e9,side*.14,2.03,.303);
+    add(new THREE.SphereGeometry(.039,8,6),d.eyes,side*.14,2.03,.371);
+    const brow=add(new THREE.BoxGeometry(.18,.045,.04),d.hair,side*.14,2.14,.326);brow.rotation.z=side*(id==='felipe'?.16:-.08);
   }
-  part(new THREE.SphereGeometry(.085,10,8),d.skin,0,1.96,.37);
-  part(new THREE.BoxGeometry(.16,.038,.04),0x6b3430,0,1.82,.31);
-  part(new THREE.BoxGeometry(.2,.25,.025),0xe9e1c8,.19,1.34,.37);
-  part(new THREE.BoxGeometry(.13,.035,.03),d.shirt,.19,1.4,.39);
-  if(id==='matheus'||id==='luan'){const belly=part(new THREE.SphereGeometry(.37,14,10),d.shirt,0,.98,.18);belly.scale.set(id==='matheus'?1.23:1.05,.85,.8);}
-  if(id==='vitin') { for(let i=0;i<13;i++) {const a=i/13*Math.PI*2;part(new THREE.SphereGeometry(.12,7,6),d.hair,Math.cos(a)*.31,2.22+Math.sin(i*3)*.05,Math.sin(a)*.3);}const chain=part(new THREE.TorusGeometry(.23,.025,5,16),0xe1b95e,0,1.5,.34);chain.scale.y=.8; }
-  if(id==='luan'||id==='matheus'){const beard=part(new THREE.SphereGeometry(.26,10,7),d.hair,0,1.74,.18);beard.scale.set(1,id==='luan'?1.2:.7,.85);}
-  if(id==='lucas'){const pomp=part(new THREE.SphereGeometry(.3,12,8),d.hair,0,2.27,.13);pomp.scale.set(1,.7,1.2);}
-  g.scale.y=id==='luan'?1.12:id==='joao'?1.06:1;
+  add(new THREE.SphereGeometry(.078,10,8),d.skin,0,1.96,.37,[.72,1,.78]);
+  const mouth=add(new THREE.BoxGeometry(.16,.035,.035),0x743d38,0,1.82,.318);mouth.rotation.x=-.08;
+  // Shirt details make the silhouettes readable even from behind.
+  if(id==='luan') { add(new THREE.BoxGeometry(.16,.28,.025),0xd6dcdd,.19,1.34,.39);add(new THREE.BoxGeometry(.1,.025,.03),0x858d90,.19,1.42,.405); }
+  if(id==='felipe') { add(new THREE.BoxGeometry(.19,.25,.025),0xd5e5f5,.19,1.34,.39);add(new THREE.BoxGeometry(.13,.035,.03),0x2464bd,.19,1.4,.408); }
+  if(id==='joao') add(new THREE.BoxGeometry(.2,.025,.02),0xd8dcc9,0,1.5,.39);
+  if(id==='matheus'||id==='luan'){const belly=add(new THREE.SphereGeometry(.37,16,12),d.shirt,0,.98,.18);belly.scale.set(id==='matheus'?1.32:1.15,.88,.86);}
+
+  // Hair, beard and accessories based on the supplied reference photos.
+  if(id==='vitin') {
+    for(let i=0;i<20;i++){const a=i/20*Math.PI*2;const radius=i%3===0?.24:.34;add(new THREE.SphereGeometry(.105,8,6),i%5===0?0x6c5637:d.hair,Math.cos(a)*radius,2.23+(i%4)*.045,Math.sin(a)*.28);}
+    const chain=add(new THREE.TorusGeometry(.23,.023,6,18),0xe6c463,0,1.5,.365);chain.scale.y=.8;
+    add(new THREE.TorusGeometry(.05,.014,5,12),0xdde5eb,-.34,2.02,.04);
+    add(new THREE.BoxGeometry(.11,.035,.03),d.hair,0,1.84,.35);
+  } else if(id==='lucas') {
+    const hair=add(new THREE.SphereGeometry(.32,14,10),d.hair,0,2.25,.02,[1,.68,1.1]);hair.rotation.z=-.08;
+    const cap=add(new THREE.SphereGeometry(.35,14,8),0x26352b,0,2.29,-.015,[1,.48,1]);cap.rotation.z=-.05;
+    const strap=add(new THREE.BoxGeometry(.34,.07,.08),0x18231d,0,2.27,-.31);strap.rotation.x=.1;
+    const moustache=add(new THREE.CapsuleGeometry(.035,.25,4,8),d.hair,0,1.86,.355,[1.55,1,.65]);moustache.rotation.z=Math.PI/2;
+    add(new THREE.SphereGeometry(.15,10,7),d.hair,0,1.72,.18,[.78,.48,.72]);
+  } else if(id==='joao') {
+    add(new THREE.SphereGeometry(.34,14,10),d.hair,0,2.27,-.02,[.91,.45,.9]);
+    [-.365,.365].forEach(x=>add(new THREE.SphereGeometry(.145,10,7),d.skin,x,2.01,0,[.52,1,.68]));
+    add(new THREE.BoxGeometry(.1,.025,.025),d.hair,0,1.83,.35);
+  } else if(id==='felipe') {
+    add(new THREE.SphereGeometry(.34,14,10),d.hair,.03,2.26,-.02,[1,.5,1]);
+    for(let i=0;i<4;i++){const fringe=add(new THREE.CapsuleGeometry(.045,.2,3,6),d.hair,-.19+i*.12,2.22,.25);fringe.rotation.z=-.55;}
+    add(new THREE.BoxGeometry(.12,.028,.028),d.hair,0,1.84,.35);
+    add(new THREE.SphereGeometry(.11,9,6),d.hair,0,1.73,.2,[.72,.42,.65]);
+  } else {
+    // Luan and Matheus: short fade, fuller beards; Luan keeps his signature glasses.
+    add(new THREE.SphereGeometry(.35,14,10),d.hair,0,2.27,-.02,[1,.5,1]);
+    const beard=add(new THREE.SphereGeometry(.28,12,9),d.hair,0,1.79,.14,[1,id==='luan'?1.08:.88,.82]);
+    beard.position.z=.15;
+    if(id==='luan'){
+      [-1,1].forEach(side=>add(new THREE.BoxGeometry(.27,.17,.025),0x17191b,side*.16,2.03,.374));
+      add(new THREE.BoxGeometry(.1,.035,.03),0x17191b,0,2.03,.385);
+    }
+  }
+  g.scale.y=id==='luan'?1.1:id==='joao'?1.06:1;
   return g;
 }
 

@@ -34,6 +34,8 @@ for(const sector of sectors){
 export const spawn:Point={x:0,z:20};
 export const botSpawns:Point[]=[{x:-22,z:-12},{x:22,z:-12},{x:-22,z:12},{x:22,z:12}];
 export const patrolPoints:Point[]=[{x:0,z:-20},{x:-11,z:-16},{x:-22,z:-12},{x:-25,z:0},{x:-22,z:12},{x:-11,z:16},{x:0,z:20},{x:11,z:16},{x:22,z:12},{x:25,z:0},{x:22,z:-12},{x:11,z:-16}];
+// Three fixed but discreet pickup points, spread across different factory sectors.
+export const smokeSpawns:Point[]=[{x:-29,z:4},{x:8,z:-22},{x:29,z:4}];
 export function canMove(x:number,z:number,r=.42){return Math.abs(x)<bounds.x-.6&&Math.abs(z)<bounds.z-.6&&!obstacles.some(o=>Math.abs(x-o.x)<o.w/2+r&&Math.abs(z-o.z)<o.d/2+r);}
 export function clearLine(a:Point,b:Point,r=0){
  const length=Math.hypot(b.x-a.x,b.z-a.z),steps=Math.ceil(length/.2);

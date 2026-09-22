@@ -71,7 +71,7 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
 .hide-button{width:82px;height:82px;font-size:12px;gap:5px}
 .rotate-notice{display:none}
 @media(pointer:coarse) and (orientation:portrait){.rotate-notice{position:absolute;inset:0;z-index:60;background:#0c151ef5;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px}.rotate-notice b{font-size:30px}.rotate-notice p{max-width:300px;line-height:1.6}}
-@media(orientation:landscape) and (max-height:550px){.top-hud{top:5px}.game-message{top:65px;font-size:12px;padding:6px 10px}.mobile-controls{bottom:10px;padding:0 max(18px,env(safe-area-inset-left))}.joystick{width:100px;height:100px}.action-buttons .insult-button{width:80px;height:80px!important}.trap-button,.hide-button{width:64px;height:64px}.desktop-hint{display:none}.lobby-content{padding:15px 0}.character-grid{grid-template-columns:repeat(5,1fr)}.character-card:last-child{grid-column:auto}.avatar{height:65px}.lobby-title h1{font-size:26px;margin-bottom:14px}.mission-card{margin:12px 0;flex-direction:row}.control-hint{margin:12px 0}}
+@media(orientation:landscape) and (max-height:550px){.top-hud{top:5px}.game-message{top:65px;font-size:12px;padding:6px 10px}.mobile-controls{bottom:10px;padding:0 max(18px,env(safe-area-inset-left))}.joystick{width:100px;height:100px}.action-buttons .insult-button{width:80px;height:80px!important}.trap-button,.smoke-button,.hide-button{width:64px;height:64px}.desktop-hint{display:none}.lobby-content{padding:15px 0}.character-grid{grid-template-columns:repeat(5,1fr)}.character-card:last-child{grid-column:auto}.avatar{height:65px}.lobby-title h1{font-size:26px;margin-bottom:14px}.mission-card{margin:12px 0;flex-direction:row}.control-hint{margin:12px 0}}
 .webgl-fallback{position:absolute;z-index:30;inset:0;display:grid;place-content:center;justify-items:center;text-align:center;padding:28px;background:radial-gradient(circle,#263934,#0d1417 62%)}
 .webgl-fallback h2{font-size:30px;margin:14px 0 6px}
 .webgl-fallback p{margin:0 0 20px;color:#aab6b2}
@@ -98,7 +98,8 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
 .revive-button{width:78px;height:78px;background:#39a96d!important;border-color:#b8ffd1!important;color:#07150f!important;font-size:10px}
 .revive-button small{position:absolute;bottom:14px;font-size:8px;opacity:.8;text-transform:uppercase}
 .trap-button{width:72px;height:72px}
-.trap-button>b{position:absolute;right:-2px;top:-6px;width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#111;font-size:12px}
+.smoke-button{width:72px;height:72px;background:#41545be8!important;border-color:#c9e2df!important}
+.trap-button>b,.smoke-button>b{position:absolute;right:-2px;top:-6px;width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#111;font-size:12px}
 .insult-button{width:104px;height:104px!important;background:var(--red)!important;border:4px solid #ff9298!important}
 .insult-button b{font-size:14px;margin-top:4px}
 .action-buttons button span{position:absolute;inset:0;display:grid;place-items:center;border-radius:50%;background:#0c1216d9;font-weight:900}
@@ -181,7 +182,7 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
   .mobile-controls{padding:0 18px}
   .joystick{width:112px;height:112px}
   .insult-button{width:92px;height:92px!important}
-  .trap-button{width:64px;height:64px}
+  .trap-button,.smoke-button{width:64px;height:64px}
   .action-buttons{gap:8px}
 }
 @media(min-width:900px){.mobile-controls{padding:0 44px}.joystick{opacity:.68}.game-message{left:44px}}
@@ -196,6 +197,6 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
  .game-message{bottom:max(120px,calc(110px + env(safe-area-inset-bottom)));left:max(18px,env(safe-area-inset-left));max-width:min(260px,36vw);font-size:10px;padding:5px 7px}
  .sector-tag{top:59px;font-size:8px;padding:3px 5px}
  .mobile-controls{bottom:max(10px,env(safe-area-inset-bottom));padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right))}
- .joystick{width:96px;height:96px}.control-stack{gap:7px}.extra-actions button{min-width:66px;font-size:10px;padding:6px}.action-buttons{gap:9px}.action-buttons .insult-button{width:76px!important;height:76px!important}.hide-button,.trap-button,.revive-button{width:62px;height:62px;font-size:9px}
+ .joystick{width:96px;height:96px}.control-stack{gap:7px}.extra-actions button{min-width:66px;font-size:10px;padding:6px}.action-buttons{gap:7px}.action-buttons .insult-button{width:76px!important;height:76px!important}.hide-button,.trap-button,.smoke-button,.revive-button{width:60px;height:60px;font-size:9px}
  .desktop-hint{display:none}.character-grid{grid-template-columns:repeat(5,1fr)}.character-card:last-child{grid-column:auto}.lobby-content{padding:16px 0}.mission-card{flex-direction:row;margin:12px 0}.multiplayer-note{margin:8px 0}
 }

@@ -22,3 +22,21 @@ export function makeKnife(){
  const guard=new THREE.Mesh(new THREE.BoxGeometry(.17,.035,.085),material(0x67757c));guard.position.y=.115;g.add(guard);
  return g;
 }
+export function makeSmokePickup(){
+ const g=new THREE.Group();g.name='smoke-pickup';
+ const can=new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.32,8),material(0x52666b));can.rotation.z=Math.PI/2;can.castShadow=true;g.add(can);
+ const band=new THREE.Mesh(new THREE.CylinderGeometry(.135,.135,.09,8),material(0xc5ed67));band.rotation.z=Math.PI/2;g.add(band);
+ const pin=new THREE.Mesh(new THREE.TorusGeometry(.075,.014,5,10),material(0xa9b7b9));pin.position.set(.19,.07,0);pin.rotation.y=Math.PI/2;g.add(pin);
+ const glow=new THREE.PointLight(0xbfe96a,.7,2.4);glow.position.y=.25;g.add(glow);
+ return g;
+}
+export function makeSmokeCloud(){
+ const g=new THREE.Group();g.name='smoke-cloud';
+ const mat=new THREE.MeshStandardMaterial({color:0xb8c4c2,transparent:true,opacity:.72,roughness:1,depthWrite:false,flatShading:true});
+ for(let i=0;i<18;i++){
+  const a=i*2.399,r=.35+(i%5)*.42;
+  const puff=new THREE.Mesh(new THREE.DodecahedronGeometry(.65+(i%4)*.13,0),mat.clone());
+  puff.position.set(Math.cos(a)*r,.5+(i%4)*.45,Math.sin(a)*r);puff.scale.set(1.25,.85,1.25);g.add(puff);
+ }
+ return g;
+}

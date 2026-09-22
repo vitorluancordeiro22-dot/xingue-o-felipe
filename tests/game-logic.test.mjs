@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bounds,canMove,clearLine,findPath,hideSpots,spawn,botSpawns,patrolPoints,obstacles} from '../app/components/factory-layout.ts';
+import {bounds,canMove,clearLine,findPath,hideSpots,smokeSpawns,spawn,botSpawns,patrolPoints,obstacles} from '../app/components/factory-layout.ts';
 import {taunts,createTauntDeck} from '../app/components/taunts.ts';
 import {createTrainingRound} from '../app/components/round-roles.ts';
 
@@ -24,7 +24,7 @@ test('factory is four times the original area with 18 different hides',()=>{
  assert.equal(new Set(hideSpots.map(h=>h.kind)).size,3);
 });
 test('every spawn, patrol point and hide entrance is navigable and connected',()=>{
- const points=[spawn,...botSpawns,...patrolPoints,...hideSpots.map(h=>h.entry)];
+ const points=[spawn,...botSpawns,...patrolPoints,...smokeSpawns,...hideSpots.map(h=>h.entry)];
  for(const p of points){
   assert.ok(canMove(p.x,p.z),JSON.stringify(p)+' blocked');
   const path=findPath(spawn,p);assert.ok(path.length,JSON.stringify(p)+' disconnected');

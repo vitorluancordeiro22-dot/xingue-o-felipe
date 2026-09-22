@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import {buildFactory} from './factory-scenery';
-import {canMove,clearLine,findPath,hideSpots,spawn,botSpawns,patrolPoints,sectorAt,type HideSpot,type Point} from './factory-layout';
+import {canMove,clearLine,findPath,hideSpots,smokeSpawns,spawn,botSpawns,patrolPoints,sectorAt,type HideSpot,type Point} from './factory-layout';
 import {createTauntDeck} from './taunts';
 import {createTrainingRound} from './round-roles';
 import {captureTarget,detergentLanding} from './game-actions';
-import {makeBottle,makeSpill,makeKnife} from './game-props';
-import {RoundScores,ROUND_SECONDS,type RankingRow} from "./round-scores";
+import {makeBottle,makeSpill,makeKnife,makeSmokeCloud,makeSmokePickup} from './game-props';
+import {allSurvivorsDown,RoundScores,ROUND_SECONDS,type RankingRow} from "./round-scores";
 import type {GameAudio} from "./game-audio";
 import type {GameSettings} from "./game-settings";
-import { ArrowLeft, Eye, RotateCcw, SprayCan, Volume2, Settings } from "lucide-react";
+import { ArrowLeft, CloudFog, Eye, RotateCcw, SprayCan, Volume2, Settings } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type GameState = "playing" | "spectating" | "won" | "lost";
@@ -23,8 +23,9 @@ type Vec = { x: number; z: number };
 const nextTaunt=createTauntDeck();
 const FELIPE_SIGHT=12;
 const FELIPE_CROUCH_SIGHT=6;
-const REVIVE_SECONDS=10;
+const REVIVE_SECONDS=5;
 const DOWNED_SECONDS=20;
+const SMOKE_SECONDS=8;
 
 const charData: Record<string, { skin: number; shirt: number; pants:number; scale: [number, number, number]; hair: number; eyes:number }> = {
   luan: { skin: 0xa96f50, shirt: 0x858d90, pants:0x26323b, scale: [1.14, 1.12, 1.08], hair: 0x151211, eyes:0x241812 },
@@ -119,6 +120,7 @@ export function makePerson(id: string, name: string) {
     }
   }
   g.scale.y=id==='luan'?1.1:id==='joao'?1.06:1;
+  g.userData.baseScaleY=g.scale.y;
   return g;
 }
 
@@ -130,7 +132,7 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
   const mountRef = useRef<HTMLDivElement>(null);
   const moveRef = useRef<Vec>({ x: 0, z: 0 });
   const joystickCleanup=useRef<()=>void>(()=>{});
-  const gameApiRef = useRef({ insult: () => {}, trap: () => {}, hide: () => {}, jump:()=>{}, emote:()=>{}, capture:()=>{}, revive:()=>{} });
+  const gameApiRef = useRef({ insult: () => {}, trap: () => {}, smoke:()=>{}, hide: () => {}, jump:()=>{}, emote:()=>{}, capture:()=>{}, revive:()=>{} });
   const [isFelipe,setIsFelipe]=useState(false);
   const [revealing,setRevealing]=useState(true);
   const [emoteCooldown,setEmoteCooldown]=useState(0);
@@ -151,6 +153,8 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
   const [time, setTime] = useState(ROUND_SECONDS);
   const [score, setScore] = useState(0);
   const [traps, setTraps] = useState(3);
+  const [smokes,setSmokes]=useState(0);
+  const [smokeCooldown,setSmokeCooldown]=useState(0);
   const [trapCooldown, setTrapCooldown] = useState(0);
   const [insultCooldown, setInsultCooldown] = useState(0);
   const [message, setMessage] = useState("Ache um esconderijo e provoque o Felipe!");
@@ -176,8 +180,10 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
     const bodies:{mesh:THREE.Group;at:number;revived?:boolean}[]=[];
     let localTime = ROUND_SECONDS;
     let localTraps = 3;
+    let localSmokes=0;
     let insultCd = 0;
     let trapCd = 0;
+    let smokeCd=0;
     let felipeSlow = 0;
     let lastUi = 0;
     let hiding=false;
@@ -203,7 +209,7 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
     const emotes=['TCHAUZINHO 👋','DANCINHA 🕺','RISADA 😂'];
     const keys = new Set<string>();
 
-    setTime(ROUND_SECONDS);setRanking([]); setScore(0); setTraps(3); setTrapCooldown(0); setInsultCooldown(0); setRenderError(false);setAttackReady(false);setAttackCooldown(0);setReviveInfo({available:false,name:'',seconds:0});setReviving(false);
+    setTime(ROUND_SECONDS);setRanking([]); setScore(0); setTraps(3);setSmokes(0);setSmokeCooldown(0); setTrapCooldown(0); setInsultCooldown(0); setRenderError(false);setAttackReady(false);setAttackCooldown(0);setReviveInfo({available:false,name:'',seconds:0});setReviving(false);
     setState("playing"); setRemaining(5); setMessage(hunterRole?'Você é o Felipe! Aproxime-se e aperte MATAR. Confira os esconderijos com F.':'Ache um esconderijo e provoque o Felipe!');
     setHidden(false);setWinner('');setHideInfo({label:'',seconds:0,available:false});setDanger(false);crouchRef.current=false;setCrouching(false);moveRef.current={x:0,z:0};lookRef.current={yaw:0,pitch:0};
     pausedRef.current=false;setPaused(false);setIsFelipe(hunterRole);setRevealing(true);setEmoteCooldown(0);spectateRef.current=0;
@@ -263,6 +269,14 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
     let lastOnlineState=0;
     const sendOnline=(event:string,payload:Record<string,unknown>)=>{if(multiplayer)void multiplayer.channel.send({type:'broadcast',event,payload:{...payload,from:multiplayer.clientId}});};
     const puddles: { mesh: THREE.Group; bottle:THREE.Group; from:THREE.Vector3; to:THREE.Vector3; age:number; life: number }[] = [];
+    const smokePickups=smokeSpawns.map((p,index)=>{const mesh=makeSmokePickup();mesh.position.set(p.x,.28,p.z);scene.add(mesh);return{index,mesh,collected:false};});
+    const smokeClouds:{mesh:THREE.Group;life:number;age:number}[]=[];
+    const spawnSmoke=(x:number,z:number)=>{const mesh=makeSmokeCloud();mesh.position.set(x,0,z);mesh.scale.setScalar(.15);scene.add(mesh);smokeClouds.push({mesh,life:SMOKE_SECONDS,age:0});audio?.play('throw');};
+    const smokeBlocks=(a:THREE.Vector3,b:THREE.Vector3)=>smokeClouds.some(s=>{
+      if(s.life<=0)return false;const dx=b.x-a.x,dz=b.z-a.z,len2=dx*dx+dz*dz||1;
+      const t=Math.max(0,Math.min(1,((s.mesh.position.x-a.x)*dx+(s.mesh.position.z-a.z)*dz)/len2));
+      return Math.hypot(a.x+dx*t-s.mesh.position.x,a.z+dz*t-s.mesh.position.z)<3.2;
+    });
     const heldKnife=makeKnife();heldKnife.position.set(0,-.6,.12);
     const hunterArm=felipe.children.filter(c=>c.name==='arm')[1];hunterArm.add(heldKnife);
     scene.add(camera);const viewKnife=makeKnife();viewKnife.position.set(.3,-.3,-.65);viewKnife.rotation.z=-.4;camera.add(viewKnife);
@@ -279,14 +293,17 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
       if(mesh.userData.dead||mesh.userData.downed)return;
       mesh.userData.downed=true;mesh.userData.downedAt=elapsed;mesh.visible=true;board.down(mesh.userData.scoreId);audio?.play('hit',audible(mesh));mesh.position.y=0;
       bodies.push({mesh,at:visualTime});
+      if(mesh===player)playerDownedAt=elapsed;
+      // Every survivor gets one rescue. A second hit is a final elimination.
+      if(mesh.userData.reviveUsed){finishDown(mesh,notify);setMessage('Segunda queda: eliminado!');return;}
       if(multiplayer&&notify)sendOnline('combat',{kind:'down',target:mesh.userData.scoreId});
       const blood=makeSpill(true);blood.position.set(mesh.position.x,0,mesh.position.z);blood.scale.setScalar(.65);scene.add(blood);
     };
     const attackAnimation=()=>{felipe.userData.attackUntil=visualTime+.4;audio?.play('knife',hunterRole?1:audible(felipe));};
     const targetFor=(inspect=false)=>captureTarget(player.position,allActors.filter(a=>a.role==='inocente').map(b=>({alive:b.alive&&!b.mesh.userData.downed,hidden:b.hiddenUntil>elapsed,position:b.mesh.position,bot:b})),inspect,clearLine)?.bot;
-    const nearbyDowned=()=>allActors.find(b=>b.role==='inocente'&&b.alive&&b.mesh.userData.downed&&Math.hypot(b.mesh.position.x-player.position.x,b.mesh.position.z-player.position.z)<2.3&&clearLine(player.position,b.mesh.position,.42));
+    const nearbyDowned=()=>allActors.find(b=>b.role==='inocente'&&b.alive&&b.mesh.userData.downed&&!b.mesh.userData.reviveUsed&&Math.hypot(b.mesh.position.x-player.position.x,b.mesh.position.z-player.position.z)<2.3&&clearLine(player.position,b.mesh.position,.42));
     const cancelRevive=(reason='Reviver cancelado.')=>{if(reviveTarget){reviveTarget=null;reviveStarted=0;setReviving(false);setMessage(reason);audio?.play('hide');}};
-    const reviveBot=(bot:typeof allActors[number],notify=true)=>{if(!bot.mesh.userData.downed)return;bot.mesh.userData.downed=false;bot.mesh.userData.downedAt=0;board.revive(bot.id);const body=bodies.find(b=>b.mesh===bot.mesh);if(body)body.revived=true;bot.mesh.rotation.x=0;bot.mesh.position.y=0;reviveTarget=null;reviveStarted=0;setReviving(false);setMessage(bot.id.toUpperCase()+' foi revivido!');audio?.play('start');if(multiplayer&&notify)sendOnline('combat',{kind:'revive',target:bot.id});};
+    const reviveBot=(bot:typeof allActors[number],notify=true)=>{if(!bot.mesh.userData.downed||bot.mesh.userData.reviveUsed)return;bot.mesh.userData.downed=false;bot.mesh.userData.downedAt=0;bot.mesh.userData.reviveUsed=true;board.revive(bot.id);const body=bodies.find(b=>b.mesh===bot.mesh);if(body)body.revived=true;bot.mesh.rotation.x=0;bot.mesh.position.y=0;reviveTarget=null;reviveStarted=0;setReviving(false);setMessage(bot.id.toUpperCase()+' foi revivido! Agora é a última vida.');audio?.play('start');if(multiplayer&&notify)sendOnline('combat',{kind:'revive',target:bot.id});};
     if(multiplayer){
       multiplayer.channel.on('broadcast',{event:'combat'},({payload})=>{
         if(payload?.from===multiplayer.clientId)return;
@@ -294,11 +311,17 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
           const x=Number(payload.x),z=Number(payload.z);if(Number.isFinite(x)&&Number.isFinite(z)){const mesh=makeSpill();mesh.position.set(x,0,z);mesh.visible=false;scene.add(mesh);const bottle=makeBottle();const from=new THREE.Vector3(Number(payload.fromX)||x,1.1,Number(payload.fromZ)||z);const to=new THREE.Vector3(x,.13,z);bottle.position.copy(from);scene.add(bottle);puddles.push({mesh,bottle,from,to,age:.4,life:18});}
           return;
         }
+        if(payload.kind==='smokeCollect'){
+          const pickup=smokePickups[Number(payload.index)];if(pickup){pickup.collected=true;pickup.mesh.visible=false;}return;
+        }
+        if(payload.kind==='smokeUse'){
+          const x=Number(payload.x),z=Number(payload.z);if(Number.isFinite(x)&&Number.isFinite(z))spawnSmoke(x,z);return;
+        }
         const target=payload?.target===multiplayer.clientId?player:allActors.find(a=>a.id===payload?.target)?.mesh;
         if(!target)return;
         if(payload.kind==='down')knockDown(target,false);
         if(payload.kind==='revive'){
-          if(payload.target===multiplayer.clientId){player.userData.downed=false;player.userData.downedAt=0;board.revive(multiplayer.clientId);const body=bodies.find(b=>b.mesh===player);if(body)body.revived=true;player.rotation.x=0;player.position.y=0;setMessage('Você foi revivido!');audio?.play('start');}
+          if(payload.target===multiplayer.clientId){player.userData.downed=false;player.userData.downedAt=0;player.userData.reviveUsed=true;playerDownedAt=0;board.revive(multiplayer.clientId);const body=bodies.find(b=>b.mesh===player);if(body)body.revived=true;player.rotation.x=0;player.position.y=0;setMessage('Você foi revivido! Agora é sua última vida.');audio?.play('start');}
           else{const actor=allActors.find(a=>a.id===payload.target);if(actor)reviveBot(actor,false);}
         }
         if(payload.kind==='eliminate')finishDown(target,false);
@@ -306,7 +329,7 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
       multiplayer.channel.on('broadcast',{event:'state'},({payload})=>{
         if(payload?.from===multiplayer.clientId)return;
         const actor=allActors.find(a=>a.id===payload?.from);if(!actor)return;
-        actor.mesh.position.set(Number(payload.x)||0,0,Number(payload.z)||0);actor.mesh.rotation.y=Number(payload.yaw)||0;const wasDowned=Boolean(actor.mesh.userData.downed);actor.mesh.userData.downed=Boolean(payload.downed);if(payload.downed&&!wasDowned)actor.mesh.userData.downedAt=elapsed;if(!payload.downed)actor.mesh.userData.downedAt=0;actor.mesh.userData.dead=!Boolean(payload.alive);actor.hiddenUntil=payload.hidden?elapsed+99999:0;actor.mesh.visible=!Boolean(payload.hidden);
+        actor.mesh.position.set(Number(payload.x)||0,0,Number(payload.z)||0);actor.mesh.rotation.y=Number(payload.yaw)||0;const wasDowned=Boolean(actor.mesh.userData.downed);actor.mesh.userData.downed=Boolean(payload.downed);actor.mesh.userData.reviveUsed=Boolean(payload.reviveUsed);actor.mesh.userData.crouching=Boolean(payload.crouching);if(payload.downed&&!wasDowned)actor.mesh.userData.downedAt=elapsed;if(!payload.downed)actor.mesh.userData.downedAt=0;actor.mesh.userData.dead=!Boolean(payload.alive);actor.hiddenUntil=payload.hidden?elapsed+99999:0;actor.mesh.visible=!Boolean(payload.hidden);
       });
     }
 
@@ -333,8 +356,8 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
       const p=path[data.step];const dx=p.x-actor.position.x,dz=p.z-actor.position.z,len=Math.hypot(dx,dz);
       const step=Math.min(speed*dt,len);if(len>0)moveEntity(actor,dx/len*step,dz/len*step);
     };
-    const sight=(target:THREE.Object3D,limit=FELIPE_SIGHT)=>target.position.distanceTo(felipe.position)<limit&&clearLine(felipe.position,target.position);
-    const catchPlayer=()=>{if(hiding)exitHide('Felipe abriu seu esconderijo!');playerDownedAt=elapsed;knockDown(player);attackAnimation();captureCd=1.2;if(multiplayer){setDanger(false);setMessage('Você caiu! Um amigo pode te reviver em 10 segundos.');}else{playerCaught=true;gameState='spectating';setState('spectating');setDanger(false);setMessage('Capturado! Você está assistindo.');}};
+    const sight=(target:THREE.Object3D,limit=FELIPE_SIGHT)=>target.position.distanceTo(felipe.position)<limit&&clearLine(felipe.position,target.position)&&!smokeBlocks(felipe.position,target.position);
+    const catchPlayer=()=>{if(hiding)exitHide('Felipe abriu seu esconderijo!');knockDown(player);attackAnimation();captureCd=1.2;if(multiplayer&&!player.userData.dead){setDanger(false);setMessage('Você caiu! Um amigo tem 20s para iniciar o revive de 5s.');}else if(!multiplayer){playerCaught=true;gameState='spectating';setState('spectating');setDanger(false);setMessage('Capturado! Você está assistindo.');}};
 
     const showInsult = (who: THREE.Object3D, value: string, mine = false) => {
       const tag = document.createElement("div"); tag.className = "world-insult"; tag.textContent = value; mount.appendChild(tag);
@@ -370,6 +393,11 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
       puddles.push({mesh,bottle,from,to,age:0,life:18});audio?.play('throw');
       localTraps--; trapCd = 9; setTraps(localTraps); setTrapCooldown(9); setMessage("Detergente no chão!");if(multiplayer)sendOnline('combat',{kind:'trap',x:landing.x,z:landing.z,fromX:player.position.x,fromZ:player.position.z});
     };
+    const doSmoke=()=>{
+      if(!canAct()||hunterRole||localSmokes<=0||smokeCd>0)return;
+      spawnSmoke(player.position.x,player.position.z);localSmokes--;smokeCd=2;setSmokes(localSmokes);setSmokeCooldown(2);setMessage('Fumaça aberta por 8 segundos! Corre!');
+      if(multiplayer)sendOnline('combat',{kind:'smokeUse',x:player.position.x,z:player.position.z});
+    };
     const doHide=()=>{
       if(playerCaught||player.userData.downed||gameState!=='playing'||pausedRef.current||settingsOpenRef.current||revealTime>0)return;
       if(hunterRole){doCapture(true);return;}
@@ -389,7 +417,7 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
       if(reviveTarget){cancelRevive();return;}
       const bot=nearbyDowned();
       if(!bot){setMessage('Chegue perto de um amigo caído.');return;}
-      reviveTarget=bot;reviveStarted=elapsed;reviveOrigin={x:player.position.x,z:player.position.z};setReviving(true);setMessage('Revivendo '+bot.id.toUpperCase()+' · fique parado por 10s.');audio?.play('hide');
+      reviveTarget=bot;reviveStarted=elapsed;reviveOrigin={x:player.position.x,z:player.position.z};setReviving(true);setMessage('Revivendo '+bot.id.toUpperCase()+' · fique perto por 5s.');audio?.play('hide');
     };
     const canAct=()=>gameState==='playing'&&!playerCaught&&!player.userData.downed&&!hiding&&!reviveTarget&&!pausedRef.current&&!settingsOpenRef.current&&revealTime<=0;
     const doJump=()=>{if(canAct()&&player.position.y===0){jumpVelocity=5.5;emoteUntil=0;audio?.play('jump');}};
@@ -402,9 +430,9 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
       if(b){knockDown(b.mesh);if(b.hideId>=0)occupied.delete(b.hideId);setMessage(b.id.toUpperCase()+' caiu!');}
       else setMessage(inspect?'Esconderijo vazio.':'Chegue mais perto.');
     };
-    gameApiRef.current = { insult: doInsult, trap: doTrap, hide:doHide, jump:doJump, emote:doEmote, capture:()=>doCapture(), revive:doRevive };
+    gameApiRef.current = { insult: doInsult, trap: doTrap, smoke:doSmoke, hide:doHide, jump:doJump, emote:doEmote, capture:()=>doCapture(), revive:doRevive };
 
-    const onKeyDown = (e: KeyboardEvent) => { if(settingsOpenRef.current)return;const key=e.key.toLowerCase();keys.add(key);if(key===' '){e.preventDefault();if(!e.repeat)doJump();}if(e.repeat)return;if(key==='e'){if(hunterRole)doCapture();else doInsult();}if(key==='q')doTrap();if(key==='f')doHide();if(key==='r')doEmote();if(key==='g')doRevive();if(key==='c'&&canAct()){crouchRef.current=!crouchRef.current;setCrouching(crouchRef.current);} };
+    const onKeyDown = (e: KeyboardEvent) => { if(settingsOpenRef.current)return;const key=e.key.toLowerCase();keys.add(key);if(key===' '){e.preventDefault();if(!e.repeat)doJump();}if(e.repeat)return;if(key==='e'){if(hunterRole)doCapture();else doInsult();}if(key==='q')doTrap();if(key==='x')doSmoke();if(key==='f')doHide();if(key==='r')doEmote();if(key==='g')doRevive();if(key==='c'&&canAct()){crouchRef.current=!crouchRef.current;setCrouching(crouchRef.current);} };
     const onKeyUp = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
     window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp);
     const clock = new THREE.Clock();
@@ -422,7 +450,7 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
       if(revealTime>0){revealTime-=dt;if(revealTime<=0){setRevealing(false);audio?.play('start');keys.clear();moveRef.current={x:0,z:0};}return;}
       if(gameState==='playing'||gameState==='spectating'){board.tick(dt);elapsed=board.elapsed;}
       if (gameState === "playing" || gameState === "spectating") {
-        localTime = board.remaining; insultCd = Math.max(0, insultCd - dt); trapCd = Math.max(0, trapCd - dt);captureCd=Math.max(0,captureCd-dt);
+        localTime = board.remaining; insultCd = Math.max(0, insultCd - dt); trapCd = Math.max(0, trapCd - dt);smokeCd=Math.max(0,smokeCd-dt);captureCd=Math.max(0,captureCd-dt);
         emoteCd=Math.max(0,emoteCd-dt);
         if(!playerCaught&&!hiding&&!player.userData.downed){jumpVelocity-=14*dt;player.position.y=Math.max(0,player.position.y+jumpVelocity*dt);if(player.position.y===0)jumpVelocity=0;}
         if(wasAirborne&&player.position.y===0&&!playerCaught)audio?.play('land');wasAirborne=player.position.y>0;
@@ -440,6 +468,11 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
           moveEntity(player,velocity.x*dt,velocity.z*dt);
           if(player.position.y===0&&Math.hypot(player.position.x-oldX,player.position.z-oldZ)>.005&&elapsed-lastStep>(crouchRef.current?.58:.32)){audio?.play('step',crouchRef.current?.28:.65);lastStep=elapsed;}
         }else{velocity.x=0;velocity.z=0;}
+
+        if(!hunterRole&&!playerCaught&&!player.userData.downed){
+          const pickup=smokePickups.find(p=>!p.collected&&p.mesh.visible&&Math.hypot(player.position.x-p.mesh.position.x,player.position.z-p.mesh.position.z)<1.15);
+          if(pickup){pickup.collected=true;pickup.mesh.visible=false;localSmokes++;setSmokes(localSmokes);setMessage('SMOKE encontrada! Aperte FUMAÇA para usar.');audio?.play('start');if(multiplayer)sendOnline('combat',{kind:'smokeCollect',index:pickup.index});}
+        }
 
         if(reviveTarget){
           const moved=Math.hypot(player.position.x-reviveOrigin.x,player.position.z-reviveOrigin.z)>.32;
@@ -475,8 +508,11 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
           if(elapsed>b.nextInsult){showInsult(b.mesh,nextTaunt());b.nextInsult=elapsed+14+Math.random()*14;}
         });
         remoteActors.forEach((a)=>{if(a.alive&&a.mesh.userData.downed&&elapsed-(a.mesh.userData.downedAt||elapsed)>DOWNED_SECONDS)finishDown(a.mesh,false);});
+        // If nobody is standing, nobody can start a revive: Felipe wins now.
+        const innocentMeshes=[...(hunterRole?[]:[player]),...allActors.filter(a=>a.role==='inocente'&&a.alive).map(a=>a.mesh)].filter(m=>!m.userData.dead);
+        if(allSurvivorsDown(board.players))for(const mesh of innocentMeshes.filter(m=>m.userData.downed))finishDown(mesh,!multiplayer||hunterRole);
         if(multiplayer&&elapsed-lastOnlineState>.08){
-          sendOnline('state',{x:player.position.x,z:player.position.z,yaw:player.rotation.y,alive:!player.userData.dead,downed:Boolean(player.userData.downed),hidden:hiding});
+          sendOnline('state',{x:player.position.x,z:player.position.z,yaw:player.rotation.y,alive:!player.userData.dead,downed:Boolean(player.userData.downed),reviveUsed:Boolean(player.userData.reviveUsed),crouching:crouchRef.current,hidden:hiding});
           lastOnlineState=elapsed;
         }
         if(!multiplayer){
@@ -522,13 +558,20 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
           setDanger(!hunterRole&&!playerCaught&&felipe.position.distanceTo(player.position)<9);setEmoteCooldown(Math.ceil(emoteCd));
           const h=activeHide||nearbySpot();setHideInfo({label:h?.kind||'',seconds:activeHide?Math.max(0,Math.ceil(activeHide.seconds-elapsed+hidingSince)):0,available:!!h});
           const downed=nearbyDowned();setReviveInfo({available:!hunterRole&&!!downed,name:downed?.id||'',seconds:reviveTarget?Math.max(0,Math.ceil(REVIVE_SECONDS-(elapsed-reviveStarted))):0});
-          lastUi = elapsed; setTime(Math.ceil(localTime)); setInsultCooldown(Math.ceil(insultCd)); setTrapCooldown(Math.ceil(trapCd)); }
+          lastUi = elapsed; setTime(Math.ceil(localTime)); setInsultCooldown(Math.ceil(insultCd)); setTrapCooldown(Math.ceil(trapCd));setSmokeCooldown(Math.ceil(smokeCd)); }
       }
 
       for(const p of puddles){
         if(p.age<.4&&p.age+dt>=.4)audio?.play('splash',audible(p.bottle));p.age+=dt;const t=Math.min(1,p.age/.4);p.bottle.position.lerpVectors(p.from,p.to,t);p.bottle.position.y+=Math.sin(t*Math.PI)*.5;p.bottle.rotation.z=t*1.5;
         p.mesh.visible=t===1&&p.life>0;if(t===1)p.mesh.scale.setScalar(Math.min(1,.2+(p.age-.4)*4));p.bottle.visible=p.life>0;
       }
+      for(const smoke of smokeClouds){
+        smoke.age+=dt;smoke.life-=dt;const grow=Math.min(1,smoke.age*1.8);smoke.mesh.scale.setScalar(grow);
+        smoke.mesh.rotation.y+=dt*.08;
+        for(const child of smoke.mesh.children)if(child instanceof THREE.Mesh){child.position.y+=dt*.025;const mat=child.material as THREE.MeshStandardMaterial;mat.opacity=Math.max(0,Math.min(.72,smoke.life<1.5?smoke.life/1.5*.72:.72));}
+        smoke.mesh.visible=smoke.life>0;
+      }
+      smokePickups.filter(p=>!p.collected).forEach((p,i)=>{p.mesh.rotation.y+=dt*.8;p.mesh.position.y=.28+Math.sin(visualTime*2+i)*.08;});
       for(const body of bodies){if(body.revived)continue;const t=Math.min(1,(visualTime-body.at)/.45);body.mesh.rotation.x=-Math.PI/2*(1-(1-t)**3);body.mesh.position.y=.32*t;}
       const attackProgress=Math.max(0,(felipe.userData.attackUntil||0)-visualTime)/.4;
       viewKnife.visible=hunterRole&&firstRef.current&&!playerCaught;
@@ -538,6 +581,11 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
       const focus=playerCaught?(observed?.mesh||felipe):player;
       if(playerCaught)setWatching(observed?observed.id+(observed.hiddenUntil>elapsed?' · escondido':''):'Felipe');
       player.visible=playerCaught||(!firstRef.current&&!hiding);
+      player.userData.crouching=crouchRef.current;
+      for(const actor of [...new Set([player,felipe,...allActors.map(a=>a.mesh)])]){
+        const base=Number(actor.userData.baseScaleY)||1,target=actor.userData.crouching?base*.7:base;
+        actor.scale.y=THREE.MathUtils.lerp(actor.scale.y,target,.18);
+      }
       if((firstRef.current||hiding)&&!playerCaught){camera.position.set(activeHide?activeHide.x:player.position.x,activeHide?(activeHide.kind==='armário'?1.6:.65):player.position.y+(crouchRef.current?1.15:1.95),activeHide?activeHide.z+.66:player.position.z);camera.rotation.order='YXZ';camera.rotation.set(lookRef.current.pitch,lookRef.current.yaw,0);}
       else {const desired = new THREE.Vector3(focus.position.x, 7, focus.position.z + 6);camera.position.lerp(desired, .075); camera.lookAt(focus.position.x, .9, focus.position.z);}
       flashlight.visible=!hiding;flashlight.position.copy(camera.position);flashlight.target.position.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(10));
@@ -623,6 +671,7 @@ export default function FactoryGame({ selectedCharacter, onExit, onReplay,settin
           <div className="action-buttons">
             <button className="hide-button" disabled={state!=='playing'||(!isFelipe&&!hidden&&!hideInfo.available)} {...immediateAction(()=>gameApiRef.current.hide())}><Eye/><b>{isFelipe?'VASCULHAR':hidden?'SAIR':'ESCONDER'}</b>{hidden&&<small className="hide-countdown">{hideInfo.seconds}s</small>}</button>
             {!isFelipe&&(reviveInfo.available||reviving)&&<button className="revive-button" disabled={state!=='playing'||(!reviveInfo.available&&!reviving)} {...immediateAction(()=>gameApiRef.current.revive())}><b>{reviving?'REVIVENDO':'REVIVER'}</b>{reviving?<span>{reviveInfo.seconds}s</span>:<small>{reviveInfo.name}</small>}</button>}
+            {!isFelipe&&smokes>0&&<button className="smoke-button" aria-label="Soltar fumaça" disabled={hidden||smokeCooldown>0||state!=='playing'} {...immediateAction(()=>gameApiRef.current.smoke())}><CloudFog/><b>{smokes}</b>{smokeCooldown>0&&<span>{smokeCooldown}s</span>}</button>}
             {!isFelipe&&<button className="trap-button" aria-label="Jogar detergente" disabled={hidden || traps === 0 || trapCooldown > 0 || state !== "playing"} {...immediateAction(()=>gameApiRef.current.trap())}><SprayCan /><b>{traps}</b>{trapCooldown > 0 && <span>{trapCooldown}s</span>}</button>}
             <button className={'insult-button '+(isFelipe&&attackReady?'in-range':'')} aria-label={isFelipe?'Atacar com faca':'Xingar'} disabled={(isFelipe?attackCooldown>0:insultCooldown>0)||state!=='playing'} {...immediateAction(()=>isFelipe?gameApiRef.current.capture():gameApiRef.current.insult())}>{isFelipe?<b aria-hidden="true">🗡</b>:<Volume2/>}<b>{isFelipe?'MATAR':'XINGAR'}</b>{isFelipe&&attackCooldown>0?<span>{attackCooldown.toFixed(1)}s</span>:!isFelipe&&insultCooldown>0?<span>{insultCooldown}s</span>:null}</button>
           </div>

@@ -1,0 +1,41 @@
+const originals=[
+ 'Bobalhão!','Burro!','Filhinho de papai!','Felinheta!','Cabeça de detergente!','Herdeiro do vacilo!',
+ 'Fiscal de banheiro!','Inútil de jaleco!','Projeto de gente!','Rei da derrota!','Supervisor de nada!',
+ 'Marmita de problema!','Cabeça de galão!','Até a empilhadeira pensa mais!','Felipe, pede pra sair!',
+ 'Seu otário!','Vai catar coquinho!','Trouxa de crachá!','Paspalho!','Babaca de plantão!','Vai se lascar, Felipe!',
+ 'Vai se ferrar!','Ô mala sem alça!','Você é uma piada!','Larga de ser bundão!','Corre, seu folgado!',
+ 'Teu GPS veio do Paraguai!','Você se perde no próprio banheiro!','Cadê o caçador? Só vejo um enrolador!',
+ 'O turno acaba e você não pega ninguém!','Essa fábrica precisa de um exorcista pra tirar tua preguiça!',
+ 'Você não pega nem resfriado!','Até o galão vazio trabalha mais!','O detergente limpa tudo, menos tua fama!',
+ 'Acorda, Felipe, já bateu o ponto!','Você veio trabalhar ou enfeitar o corredor?',
+ 'Tua perseguição está em manutenção!','Seu raciocínio entrou em férias!','Te devolveram no controle de qualidade!',
+ 'A inteligência ficou na portaria!','Tua coragem está em falta no estoque!',
+ 'Essa corridinha precisa de lubrificante!','Tua promoção foi pra atrapalhar!',
+ 'O laboratório reprovou tua existência!','Teu cérebro está no modo economia!',
+ 'O carrinho sem roda anda mais!','Pede ajuda pro papai, Felipe!',
+ 'O chefe chamou! Era pra você parar de passar vergonha!',
+ 'Nem o desengraxante tira essa lerdeza!','Tua competência evaporou!',
+ 'Você é a amostra grátis do fracasso!','Tua mira foi terceirizada!',
+ 'Teu crachá diz funcionário, mas tua cara diz visitante!',
+ 'Vai procurar serviço!','O palete tem mais iniciativa!','A máquina quebrou de vergonha de você!',
+ 'Quem deixou esse estagiário solto?','Atenção: inútil circulando no setor!',
+ 'Felipe, você errou até o corredor!','Para de cheirar derrota!','Meu chinelo corre mais!',
+ 'Teu talento é fazer hora extra de vergonha!','Fala menos e corre mais!',
+ 'Vai perder de novo, campeão de nada!','Tão te procurando no achados e perdidos!',
+ 'Essa perseguição veio vencida!','Você é uma devolução sem nota fiscal!',
+ 'Deixa o galão tentar, vai ser melhor!','Não me pega nem com mapa!',
+ 'Tem mais espuma do que ideia nessa cabeça!','Felipe, desliga e liga de novo!',
+ 'Você é lento até pra desistir!','A fábrica não tem seguro contra tua burrice!',
+ 'Dá licença pro funcionário de verdade!','A vergonha é tua, mas eu tô sentindo!',
+ 'Você foi aprovado por engano!','O piso molhado tem mais presença!',
+ 'A porta automática é mais decidida!','Nem com treinamento você salva!',
+ 'Esse caçador veio sem manual!','Felipe, o estoque de desculpa acabou!',
+ 'Teu melhor movimento é bater o ponto e ir embora!',
+];
+const titles=['Fiscal','Diretor','Supervisor','Gerente','Presidente','Embaixador','Especialista','Rei','Mestre','Campeão','Herdeiro','Consultor'];
+const jobs=['do vacilo','da enrolação','do galão vazio','da derrota','do corredor errado','da preguiça','do palete quebrado','da espuma inútil','do atraso','do detergente vencido','da vergonha alheia','da gambiarra'];
+export const taunts=[...new Set([...originals,...titles.flatMap(a=>jobs.map(b=>a+' '+b+'!'))])];
+export function createTauntDeck(random:()=>number=Math.random){
+ let deck:string[]=[];let last='';
+ return ()=>{if(!deck.length){deck=[...taunts];for(let i=deck.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[deck[i],deck[j]]=[deck[j],deck[i]];}if(deck[deck.length-1]===last)[deck[0],deck[deck.length-1]]=[deck[deck.length-1],deck[0]];}last=deck.pop()!;return last;};
+}

@@ -1,6 +1,10 @@
 export const ROUND_SECONDS=300;
 export type ScorePlayer={id:string;name:string;role:'felipe'|'inocente';alive:boolean;downed:boolean;actions:number;seconds:number};
 export type RankingRow=ScorePlayer&{total:number;rank:number};
+export function allSurvivorsDown(players:ScorePlayer[]){
+ const living=players.filter(p=>p.role==='inocente'&&p.alive);
+ return living.length>0&&living.every(p=>p.downed);
+}
 export class RoundScores{
  elapsed=0;finished=false;
  players:ScorePlayer[];
